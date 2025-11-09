@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8" />
+  <title>TripPlanner – Térkép</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    .label { background:#fff; padding:2px 6px; border-radius:4px; border:1px solid #ccc; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const itineraryId = 5; // <- hagyd a saját azonosítódat
+  const apiBase = "http://localhost:5130";
+
+  const map = L.map('map').setView([47.4979, 19.0402], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  // ÚJ: összegzés-lekérés
+  fetch(`${apiBase}/api/itineraries/${itineraryId}/route-summary`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.points || data.points.length === 0) { alert("Nincs pont az útvonalban."); return; }
+
+      const latlngs = [];
+      const steps = [];
+      data.points.forEach((p, i) => {
+        latlngs.push([p.latitude, p.longitude]);
+        const m = L.marker([p.latitude, p.longitude]).addTo(map);
+        m.bindTooltip(`<div class="label">${i+1}. ${p.name} (#${p.id})</div>`,
+          {permanent:true, direction:"top", offset:[0,-10]});
+        steps.push(`${i+1}. ${p.name}`);
+      });
+
+      L.polyline(latlngs).addTo(map);
+      map.fitBounds(L.latLngBounds(latlngs), { padding:[30,30] });
+
+      // ÚJ: felirat az össztávval
+      const info = L.control({position: 'topright'});
+      info.onAdd = function() {
+        const div = L.DomUtil.create('div', 'label');
+        div.style.maxWidth = '260px';
+        div.innerHTML = `
+          <b>Itinerary #${data.itineraryId}</b><br>
+          Pontok: ${data.count}<br>
+          Össztáv: <b>${data.totalKm} km</b><hr style="margin:6px 0">
+          <div style="font-size:12px; line-height:1.4">${steps.join('<br>')}</div>
+        `;
+        return div;
+      };
+      info.addTo(map);
+    })
+    .catch(err => { console.error(err); alert("Hiba a route lekérésénél."); });
+</script>
+<script>
+  const itineraryId = 2; // <- hagyd a saját azonosítódat
+  const apiBase = "http://localhost:5130";
+
+  const map = L.map('map').setView([47.4979, 19.0402], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  // ÚJ: összegzés-lekérés
+  fetch(`${apiBase}/api/itineraries/${itineraryId}/route-summary`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.points || data.points.length === 0) { alert("Nincs pont az útvonalban."); return; }
+
+      const latlngs = [];
+      const steps = [];
+      data.points.forEach((p, i) => {
+        latlngs.push([p.latitude, p.longitude]);
+        const m = L.marker([p.latitude, p.longitude]).addTo(map);
+        m.bindTooltip(`<div class="label">${i+1}. ${p.name} (#${p.id})</div>`,
+          {permanent:true, direction:"top", offset:[0,-10]});
+        steps.push(`${i+1}. ${p.name}`);
+      });
+
+      L.polyline(latlngs).addTo(map);
+      map.fitBounds(L.latLngBounds(latlngs), { padding:[30,30] });
+
+      // ÚJ: felirat az össztávval
+      const info = L.control({position: 'topright'});
+      info.onAdd = function() {
+        const div = L.DomUtil.create('div', 'label');
+        div.style.maxWidth = '260px';
+        div.innerHTML = `
+          <b>Itinerary #${data.itineraryId}</b><br>
+          Pontok: ${data.count}<br>
+          Össztáv: <b>${data.totalKm} km</b><hr style="margin:6px 0">
+          <div style="font-size:12px; line-height:1.4">${steps.join('<br>')}</div>
+        `;
+        return div;
+      };
+      info.addTo(map);
+    })
+    .catch(err => { console.error(err); alert("Hiba a route lekérésénél."); });
+</script>
+
+</body>
+</html>
