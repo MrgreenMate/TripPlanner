@@ -1,19 +1,16 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using TripPlanner.Api.Data;
+using TripPlanner.Api.DTOs;
+using Swashbuckle.AspNetCore.Filters;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// **Fix HTTP port**
-builder.WebHost.UseUrls("http://localhost:5130");
-
-// EF + SQLite
+// --- DB (mindig az aktuális mappában lévő fájlt használjuk)
+var dbPath = Path.Combine(builder.Environment.ContentRootPath, "tripplanner_dev.db");
 builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseSqlite("Data Source=tripplanner_dev.db"));
+    opt.UseSqlite(builder.Configuration.GetConnectionString("Sqlite") ?? $"Data Source={dbPath}"));
 
-// Controllers + Swagger
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// --- CORS ---
 builder.Services.AddCors(opt =>
 {
     opt.AddPolicy("dev", p => p
@@ -22,12 +19,22 @@ builder.Services.AddCors(opt =>
         .AllowAnyMethod());
 });
 
-// pipeline
+// --- Controllers + Swagger ---
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new() { Title = "TripPlanner API", Version = "v1" });
+    c.ExampleFilters(); // ha használod az OptimizeRequestExamples-t
+});
+
+// Ha használod az OptimizeRequestExamples-t:
+builder.Services.AddSwaggerExamplesFromAssemblyOf<OptimizeRequest>();
 
 var app = builder.Build();
+
 app.UseCors("dev");
 
-// Swagger mindig engedélyezve fejlesztéshez
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
@@ -35,18 +42,14 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = "swagger";
 });
 
-// ❗ Kapcsold ki a HTTPS redirectet fejlesztés alatt:
-//// app.UseHttpsRedirection();
-
 app.UseAuthorization();
 app.MapControllers();
 
-// DB init
+// 🔹 MIGRÁCIÓ FUTTATÁSA INDULÁSKOR
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 }
-
 
 app.Run();

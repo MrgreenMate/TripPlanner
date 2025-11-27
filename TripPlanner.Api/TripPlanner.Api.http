@@ -1,6 +1,212 @@
-@TripPlanner.Api_HostAddress = http://localhost:5130
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <title>TripPlanner – Itineraries</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { margin-bottom: 10px; }
+    .controls { margin-bottom: 15px; }
+    label { font-size: 14px; }
+    input[type="text"] { padding: 4px 6px; width: 260px; }
+    button { padding: 5px 10px; margin-left: 5px; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 14px; }
+    th { background: #f2f2f2; text-align: left; }
+    tr:nth-child(even) { background: #fafafa; }
+    .actions button { margin-right: 4px; }
+    .status { margin-top: 8px; font-size: 13px; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>TripPlanner – Itineraries lista</h1>
 
-GET {{TripPlanner.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+  <div class="controls">
+    <label>API base URL:
+      <input type="text" id="apiBase" value="http://localhost:5130" />
+    </label>
+    <button id="loadBtn">Itineraries betöltése</button>
+    <button id="refreshBtn">Frissítés</button>
+    <div class="status" id="status"></div>
+  </div>
 
-###
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Létrehozva (UTC)</th>
+        <th>TravelMode</th>
+        <th>POI db</th>
+        <th>Mûveletek</th>
+      </tr>
+    </thead>
+    <tbody id="itineraryTableBody">
+      <!-- ide töltjük be sorokat JS-bõl -->
+    </tbody>
+  </table>
+
+  <script>
+    const apiBaseInput = document.getElementById('apiBase');
+    const statusDiv = document.getElementById('status');
+    const tbody = document.getElementById('itineraryTableBody');
+    const loadBtn = document.getElementById('loadBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+
+    async function loadItineraries() {
+      const apiBase = apiBaseInput.value.trim();
+      if (!apiBase) {
+        alert("Add meg az API base URL-t (pl. http://localhost:5130)!");
+        return;
+      }
+      statusDiv.textContent = "Betöltés folyamatban...";
+      tbody.innerHTML = "";
+
+      try {
+        const resp = await fetch(`${apiBase}/api/itineraries`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          statusDiv.textContent = "Nincs még egyetlen itineráré sem.";
+          return;
+        }
+
+        for (const it of data) {
+          const tr = document.createElement('tr');
+
+          const poiCount = (() => {
+            if (!it.optimizedRouteJson) return 0;
+            try {
+              const ids = JSON.parse(it.optimizedRouteJson);
+              return Array.isArray(ids) ? ids.length : 0;
+            } catch {
+              return 0;
+            }
+          })();
+
+          const created = it.createdUtc ? new Date(it.createdUtc).toISOString() : "";
+
+          tr.innerHTML = `
+            <td>${it.id}</td>
+            <td>${created}</td>
+            <td>${it.travelMode ?? ""}</td>
+            <td>${poiCount}</td>
+            <td class="actions">
+              <button data-id="${it.id}" class="mapBtn">Térképen</button>
+              <button data-id="${it.id}" class="delBtn">Törlés</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        }
+
+        // gombok eseménykezelõi
+        tbody.querySelectorAll('.mapBtn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            // ugyanebben a mappában levõ map.html-re nyitunk új ablakot
+            window.open(`map.html?id=${id}`, '_blank');
+          });
+        });
+
+        tbody.querySelectorAll('.delBtn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.getAttribute('data-id');
+            if (!confirm(`Biztosan törlöd az itinerárét? #${id}`)) return;
+            try {
+              const delResp = await fetch(`${apiBase}/api/itineraries/${id}`, {
+                method: 'DELETE'
+              });
+              if (!delResp.ok && delResp.status !== 204) {
+                throw new Error(`DELETE HTTP ${delResp.status}`);
+              }
+              statusDiv.textContent = `Itineráré #${id} törölve.`;
+              await loadItenerariesWithoutStatusReset();
+            } catch (err) {
+              console.error(err);
+              alert("Hiba a törlés során.");
+            }
+          });
+        });
+
+        statusDiv.textContent = `Betöltve: ${data.length} itineráré.`;
+      } catch (err) {
+        console.error(err);
+        statusDiv.textContent = "Hiba a betöltés során. Ellenõrizd az API base URL-t és hogy fut-e a backend.";
+      }
+    }
+
+    // Kis helper, hogy törlés után ne írjuk át azonnal a status üzenetet
+    async function loadItenerariesWithoutStatusReset() {
+      const apiBase = apiBaseInput.value.trim();
+      try {
+        const resp = await fetch(`${apiBase}/api/itineraries`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        tbody.innerHTML = "";
+        for (const it of data) {
+          const tr = document.createElement('tr');
+
+          const poiCount = (() => {
+            if (!it.optimizedRouteJson) return 0;
+            try {
+              const ids = JSON.parse(it.optimizedRouteJson);
+              return Array.isArray(ids) ? ids.length : 0;
+            } catch {
+              return 0;
+            }
+          })();
+
+          const created = it.createdUtc ? new Date(it.createdUtc).toISOString() : "";
+
+          tr.innerHTML = `
+            <td>${it.id}</td>
+            <td>${created}</td>
+            <td>${it.travelMode ?? ""}</td>
+            <td>${poiCount}</td>
+            <td class="actions">
+              <button data-id="${it.id}" class="mapBtn">Térképen</button>
+              <button data-id="${it.id}" class="delBtn">Törlés</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        }
+
+        tbody.querySelectorAll('.mapBtn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            window.open(`map.html?id=${id}`, '_blank');
+          });
+        });
+
+        tbody.querySelectorAll('.delBtn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.getAttribute('data-id');
+            if (!confirm(`Biztosan törlöd az itinerárét? #${id}`)) return;
+            try {
+              const delResp = await fetch(`${apiBase}/api/itineraries/${id}`, {
+                method: 'DELETE'
+              });
+              if (!delResp.ok && delResp.status !== 204) {
+                throw new Error(`DELETE HTTP ${delResp.status}`);
+              }
+              statusDiv.textContent = `Itineráré #${id} törölve.`;
+              await loadItenerariesWithoutStatusReset();
+            } catch (err) {
+              console.error(err);
+              alert("Hiba a törlés során.");
+            }
+          });
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    loadBtn.addEventListener('click', loadItineraries);
+    refreshBtn.addEventListener('click', loadItineraries);
+
+    // opcionálisan: automatikus elsõ betöltés
+    // loadItineraries();
+  </script>
+</body>
+</html>

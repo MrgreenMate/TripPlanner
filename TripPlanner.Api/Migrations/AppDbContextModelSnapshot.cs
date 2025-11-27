@@ -34,8 +34,6 @@ namespace TripPlanner.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
-
                     b.ToTable("Itineraries");
                 });
 
@@ -117,17 +115,6 @@ namespace TripPlanner.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("TripPlanner.Api.Models.Itinerary", b =>
-                {
-                    b.HasOne("TripPlanner.Api.Models.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("TripPlanner.Api.Models.Review", b =>
