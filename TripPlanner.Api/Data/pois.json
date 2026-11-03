@@ -1,0 +1,306 @@
+[
+  {
+    "name": "Parlament",
+    "latitude": 47.507406,
+    "longitude": 19.045042,
+    "priority": 5
+  },
+  {
+    "name": "Országház Látogatóközpont",
+    "latitude": 47.507150,
+    "longitude": 19.043800,
+    "priority": 4
+  },
+  {
+    "name": "Lánchíd",
+    "latitude": 47.498009,
+    "longitude": 19.039909,
+    "priority": 5
+  },
+  {
+    "name": "Budai Vár",
+    "latitude": 47.496171,
+    "longitude": 19.039909,
+    "priority": 5
+  },
+  {
+    "name": "Halászbástya",
+    "latitude": 47.502534,
+    "longitude": 19.034963,
+    "priority": 5
+  },
+  {
+    "name": "Mátyás-templom",
+    "latitude": 47.502043,
+    "longitude": 19.034699,
+    "priority": 5
+  },
+  {
+    "name": "Szent István-bazilika",
+    "latitude": 47.500772,
+    "longitude": 19.053059,
+    "priority": 5
+  },
+  {
+    "name": "Hősök tere",
+    "latitude": 47.514889,
+    "longitude": 19.077404,
+    "priority": 5
+  },
+  {
+    "name": "Szépművészeti Múzeum",
+    "latitude": 47.515330,
+    "longitude": 19.077968,
+    "priority": 4
+  },
+  {
+    "name": "Vajdahunyad vára",
+    "latitude": 47.514078,
+    "longitude": 19.076040,
+    "priority": 4
+  },
+
+  {
+    "name": "Állatkert",
+    "latitude": 47.518474,
+    "longitude": 19.076004,
+    "priority": 4
+  },
+  {
+    "name": "Széchenyi Gyógyfürdő",
+    "latitude": 47.518122,
+    "longitude": 19.082278,
+    "priority": 5
+  },
+  {
+    "name": "Margitsziget – Japánkert",
+    "latitude": 47.531347,
+    "longitude": 19.046579,
+    "priority": 4
+  },
+  {
+    "name": "Margitszigeti Víztorony",
+    "latitude": 47.531865,
+    "longitude": 19.050304,
+    "priority": 3
+  },
+  {
+    "name": "Magyar Állami Operaház",
+    "latitude": 47.502684,
+    "longitude": 19.058642,
+    "priority": 4
+  },
+  {
+    "name": "Andrássy út",
+    "latitude": 47.503990,
+    "longitude": 19.060646,
+    "priority": 3
+  },
+  {
+    "name": "Dohány utcai Zsinagóga",
+    "latitude": 47.497902,
+    "longitude": 19.060654,
+    "priority": 4
+  },
+  {
+    "name": "Zsidó Múzeum",
+    "latitude": 47.498160,
+    "longitude": 19.061200,
+    "priority": 3
+  },
+  {
+    "name": "Belvárosi Plébániatemplom",
+    "latitude": 47.491663,
+    "longitude": 19.052627,
+    "priority": 3
+  },
+  {
+    "name": "Váci utca",
+    "latitude": 47.492115,
+    "longitude": 19.054224,
+    "priority": 3
+  },
+
+  {
+    "name": "Nagy Vásárcsarnok",
+    "latitude": 47.486930,
+    "longitude": 19.058179,
+    "priority": 5
+  },
+  {
+    "name": "Gellért Gyógyfürdő",
+    "latitude": 47.486340,
+    "longitude": 19.053939,
+    "priority": 5
+  },
+  {
+    "name": "Gellért-hegy – Szabadság-szobor",
+    "latitude": 47.487753,
+    "longitude": 19.049561,
+    "priority": 5
+  },
+  {
+    "name": "Citadella",
+    "latitude": 47.487548,
+    "longitude": 19.047620,
+    "priority": 5
+  },
+  {
+    "name": "Rudas Gyógyfürdő",
+    "latitude": 47.492365,
+    "longitude": 19.046131,
+    "priority": 4
+  },
+  {
+    "name": "Tabán",
+    "latitude": 47.493557,
+    "longitude": 19.039718,
+    "priority": 3
+  },
+  {
+    "name": "Budavári Sikló",
+    "latitude": 47.497893,
+    "longitude": 19.040237,
+    "priority": 4
+  },
+  {
+    "name": "Clark Ádám tér",
+    "latitude": 47.497056,
+    "longitude": 19.039613,
+    "priority": 3
+  },
+  {
+    "name": "Várkert Bazár",
+    "latitude": 47.494804,
+    "longitude": 19.041095,
+    "priority": 4
+  },
+  {
+    "name": "Budapesti Történeti Múzeum",
+    "latitude": 47.495017,
+    "longitude": 19.038416,
+    "priority": 3
+  },
+
+  {
+    "name": "Magyar Nemzeti Múzeum",
+    "latitude": 47.491088,
+    "longitude": 19.062277,
+    "priority": 4
+  },
+  {
+    "name": "Múzeumkert",
+    "latitude": 47.490943,
+    "longitude": 19.063090,
+    "priority": 3
+  },
+  {
+    "name": "Corvin-negyed",
+    "latitude": 47.485960,
+    "longitude": 19.070060,
+    "priority": 2
+  },
+  {
+    "name": "Ludovika Campus",
+    "latitude": 47.476717,
+    "longitude": 19.087662,
+    "priority": 2
+  },
+  {
+    "name": "Kopaszi-gát",
+    "latitude": 47.463884,
+    "longitude": 19.057152,
+    "priority": 4
+  },
+  {
+    "name": "MÜPA",
+    "latitude": 47.470190,
+    "longitude": 19.072197,
+    "priority": 4
+  },
+  {
+    "name": "Nemzeti Színház",
+    "latitude": 47.470840,
+    "longitude": 19.071140,
+    "priority": 4
+  },
+  {
+    "name": "Puskás Aréna",
+    "latitude": 47.502850,
+    "longitude": 19.098536,
+    "priority": 3
+  },
+  {
+    "name": "Aréna Mall",
+    "latitude": 47.503223,
+    "longitude": 19.106431,
+    "priority": 2
+  },
+  {
+    "name": "Kerepesi temető",
+    "latitude": 47.494680,
+    "longitude": 19.091383,
+    "priority": 3
+  },
+
+  {
+    "name": "Budapest Park",
+    "latitude": 47.476030,
+    "longitude": 19.070851,
+    "priority": 3
+  },
+  {
+    "name": "Stadionok",
+    "latitude": 47.503600,
+    "longitude": 19.092900,
+    "priority": 2
+  },
+  {
+    "name": "Szent Gellért tér",
+    "latitude": 47.486712,
+    "longitude": 19.053192,
+    "priority": 3
+  },
+  {
+    "name": "Fővám tér",
+    "latitude": 47.486660,
+    "longitude": 19.058130,
+    "priority": 3
+  },
+  {
+    "name": "Kálvin tér",
+    "latitude": 47.489405,
+    "longitude": 19.061736,
+    "priority": 3
+  },
+  {
+    "name": "Ferenciek tere",
+    "latitude": 47.494950,
+    "longitude": 19.056850,
+    "priority": 3
+  },
+  {
+    "name": "Nyugati pályaudvar",
+    "latitude": 47.510256,
+    "longitude": 19.055063,
+    "priority": 3
+  },
+  {
+    "name": "Keleti pályaudvar",
+    "latitude": 47.500870,
+    "longitude": 19.081750,
+    "priority": 3
+  },
+  {
+    "name": "János-hegy – Erzsébet-kilátó",
+    "latitude": 47.520569,
+    "longitude": 18.960876,
+    "priority": 5
+  },
+  {
+    "name": "Normafa",
+    "latitude": 47.509674,
+    "longitude": 18.959631,
+    "priority": 5
+  }
+]

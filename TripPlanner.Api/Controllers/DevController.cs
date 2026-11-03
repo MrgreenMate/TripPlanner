@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 using TripPlanner.Api.Data;
 using TripPlanner.Api.Models;
 
@@ -9,25 +10,75 @@ namespace TripPlanner.Api.Controllers;
 public class DevController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public DevController(AppDbContext db) => _db = db;
+    private readonly IWebHostEnvironment _env;
 
-    [HttpPost("seed-obudai")]
-    public async Task<IActionResult> SeedObudai()
+    public DevController(AppDbContext db, IWebHostEnvironment env)
     {
-        if (_db.Pois.Any())
-            return Ok(new { message = "Already seeded", count = _db.Pois.Count() });
+        _db = db;
+        _env = env;
+    }
 
-        _db.Pois.AddRange(
-            new Poi { Name = "Óbudai Egyetem NIK", Latitude = 47.5391, Longitude = 19.0375, Description = "Bécsi út 96/B", Priority = 3 },
-            new Poi { Name = "Óbudai Egyetem KVK", Latitude = 47.4898, Longitude = 19.0728, Description = "Tavaszmező 15–17.", Priority = 2 },
-            new Poi { Name = "Óbudai Egyetem YBL", Latitude = 47.5079, Longitude = 19.0865, Description = "Thököly út 74.", Priority = 1 }
+    [HttpPost("import-pois")]
+    public async Task<IActionResult> ImportPois()
+    {
+        
+        var filePath = Path.Combine(_env.ContentRootPath, "data", "pois.json");
+
+        if (!System.IO.File.Exists(filePath))
+        {
+            return NotFound(new { error = $"A fájl nem található: {filePath}" });
+        }
+
+        var json = await System.IO.File.ReadAllTextAsync(filePath);
+
+        List<Poi>? imported;
+        try
+        {
+            imported = JsonSerializer.Deserialize<List<Poi>>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = "Hibás JSON formátum", detail = ex.Message });
+        }
+
+        if (imported == null || imported.Count == 0)
+        {
+            return BadRequest(new { error = "A JSON nem tartalmaz egyetlen POI-t sem." });
+        }
+
+       
+        var existingNames = new HashSet<string>(
+            _db.Pois.Select(p => p.Name),
+            StringComparer.OrdinalIgnoreCase
         );
+
+        var toAdd = imported
+            .Where(p => !existingNames.Contains(p.Name))
+            .ToList();
+
+        if (toAdd.Count == 0)
+        {
+            return Ok(new { message = "Nem volt új POI a fájlban.", totalExisting = existingNames.Count });
+        }
+
+        _db.Pois.AddRange(toAdd);
         await _db.SaveChangesAsync();
 
         return Ok(new
         {
-            message = "Seeded",
-            ids = _db.Pois.Select(p => new { p.Id, p.Name }).ToList()
+            message = "POI-k importálva",
+            added = toAdd.Count,
+            total = _db.Pois.Count()
         });
+    }
+    [HttpPost("import-reviews")]
+    public async Task<IActionResult> ImportReviews([FromBody] List<Review> list)
+    {
+        _db.Reviews.AddRange(list);
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "Review import sikeres!" });
     }
 }

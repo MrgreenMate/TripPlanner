@@ -1,0 +1,437 @@
+﻿<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8" />
+    <title>TripPlanner – Útvonalak (Itineraries)</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .page {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 4px;
+        }
+
+        #userInfo {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+            .controls label {
+                font-size: 13px;
+            }
+
+            .controls input[type="text"],
+            .controls input[type="url"] {
+                padding: 4px 6px;
+                font-size: 13px;
+                width: 260px;
+            }
+
+            .controls input[type="checkbox"] {
+                margin-left: 4px;
+                vertical-align: middle;
+            }
+
+        button {
+            padding: 6px 10px;
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: none;
+        }
+
+            button.primary {
+                background: #1976d2;
+                color: #fff;
+            }
+
+            button.secondary {
+                background: #eee;
+            }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 10px;
+            background: #fff;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 6px 8px;
+            font-size: 13px;
+        }
+
+        th {
+            background: #f2f2f2;
+            text-align: left;
+        }
+
+        tr:nth-child(even) {
+            background: #fafafa;
+        }
+
+        .status {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #444;
+        }
+
+        .nowrap {
+            white-space: nowrap;
+        }
+
+        .actions button {
+            margin-right: 4px;
+            margin-bottom: 2px;
+        }
+
+       
+        .navbar {
+            background: #1976d2;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            color: white;
+        }
+
+        .nav-left {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+            .nav-link:hover {
+                background: rgba(255,255,255,0.15);
+            }
+
+            .nav-link.active {
+                background: white;
+                color: #1976d2;
+                font-weight: bold;
+            }
+
+        .nav-user {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .nav-user-guest {
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="navbar-root"></div>
+
+    <div class="page">
+        <h1>Útvonalak (Itineraries)</h1>
+        <div id="userInfo"></div>
+
+        <div class="card">
+            <div class="controls">
+                <div>
+                    <label>
+                        API cím (haladó):
+                        <input id="apiBase" type="url" />
+                        <small style="display:block; color:#666;">
+                            Általában nem kell módosítanod. Itt állítható be, melyik szerveren fusson az API.
+                        </small>
+                    </label>
+                </div>
+
+                <div>
+                    <label>
+                        Keresés:
+                        <input id="searchText" type="text" placeholder="ID vagy közlekedési mód (walk/drive)..." />
+                    </label>
+                </div>
+
+                <div>
+                    <label>
+                        <input id="onlyMine" type="checkbox" />
+                        Csak az én útvonalaim
+                    </label>
+                </div>
+
+                <div>
+                    <button class="primary" id="loadBtn">Betöltés</button>
+                    <button class="secondary" id="refreshBtn">Frissítés</button>
+                </div>
+            </div>
+
+            <div class="status" id="status"></div>
+
+            <p style="font-size:13px; color:#555; margin-top:6px;">
+                Innen tudod megnyitni az útvonalakat térképen, vagy törölni őket a listából.
+            </p>
+        </div>
+
+        <div class="card">
+            <table id="itTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>UserId</th>
+                        <th>Létrehozva (helyi idő)</th>
+                        <th>Indulási pont (lat, lng)</th>
+                        <th>Utazási mód</th>
+                        <th>POI-k száma</th>
+                        <th>Műveletek</th>
+                    </tr>
+                </thead>
+                <tbody>
+                   
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+
+    <script>
+        const STORAGE_KEY_USER_ID = window.TP_CONFIG.storageUserIdKey;
+        const STORAGE_KEY_USER_NAME = window.TP_CONFIG.storageUserNameKey;
+
+        const userInfoDiv = document.getElementById("userInfo");
+        const apiBaseInput = document.getElementById("apiBase");
+        const searchInput = document.getElementById("searchText");
+        const onlyMineCheckbox = document.getElementById("onlyMine");
+        const statusDiv = document.getElementById("status");
+        const tableBody = document.querySelector("#itTable tbody");
+        const loadBtn = document.getElementById("loadBtn");
+        const refreshBtn = document.getElementById("refreshBtn");
+
+        let currentUserId = null;
+        let currentUserName = "";
+
+        function initUserFromStorage() {
+            const uid = localStorage.getItem(STORAGE_KEY_USER_ID);
+            const uname = localStorage.getItem(STORAGE_KEY_USER_NAME) || "";
+
+            if (uid) {
+                currentUserId = parseInt(uid, 10);
+                currentUserName = uname;
+                userInfoDiv.innerHTML =
+                    "Bejelentkezett felhasználó: " +
+                    (uname ? `<b>${uname}</b> (userId=${uid})` : `userId=${uid}`);
+                onlyMineCheckbox.checked = true;
+            } else {
+                userInfoDiv.innerHTML =
+                    "⚠️ Nincs bejelentkezve felhasználó – a lista minden útvonalat mutat.<br>" +
+                    `<a href="index.html" style="font-size:13px;">Ugrás a bejelentkezéshez</a>`;
+                currentUserId = null;
+                currentUserName = "";
+                onlyMineCheckbox.checked = false;
+            }
+
+            apiBaseInput.value = window.TP_CONFIG.apiBase;
+        }
+
+        initUserFromStorage();
+
+        async function loadItineraries(showMessage) {
+            const apiBase = apiBaseInput.value.trim() || window.TP_CONFIG.apiBase;
+            const search = (searchInput.value || "").trim().toLowerCase();
+            const onlyMine = onlyMineCheckbox.checked;
+
+            if (showMessage) {
+                statusDiv.textContent = "Betöltés folyamatban...";
+            }
+
+            tableBody.innerHTML = "";
+
+            try {
+                const resp = await fetch(`${apiBase}/api/itineraries`);
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    statusDiv.textContent =
+                        "Hiba az itineraries lekérdezésekor: " + (data.error || resp.status);
+                    return;
+                }
+
+                let list = Array.isArray(data) ? data : [];
+
+                if (onlyMine && currentUserId != null) {
+                    list = list.filter(it => it.userId === currentUserId);
+                }
+
+                if (search.length > 0) {
+                    list = list.filter(it => {
+                        const idStr = String(it.id || "");
+                        const mode = (it.travelMode || "").toLowerCase();
+                        return idStr.includes(search) || mode.includes(search);
+                    });
+                }
+
+                list.sort((a, b) => {
+                    if (a.createdUtc && b.createdUtc) {
+                        return new Date(b.createdUtc) - new Date(a.createdUtc);
+                    }
+                    return (b.id || 0) - (a.id || 0);
+                });
+
+                if (list.length === 0) {
+                    statusDiv.textContent = "Nincs megjeleníthető útvonal a szűrésnek megfelelően.";
+                    return;
+                }
+
+                for (const it of list) {
+                    const tr = document.createElement("tr");
+
+                    const tdId = document.createElement("td");
+                    tdId.textContent = it.id ?? "";
+                    tr.appendChild(tdId);
+
+                    const tdUser = document.createElement("td");
+                    tdUser.textContent = it.userId ?? "";
+                    tr.appendChild(tdUser);
+
+                    const tdCreated = document.createElement("td");
+                    tdCreated.className = "nowrap";
+                    if (it.createdUtc) {
+                        const d = new Date(it.createdUtc);
+                        tdCreated.textContent = d.toLocaleString("hu-HU");
+                    } else {
+                        tdCreated.textContent = "-";
+                    }
+                    tr.appendChild(tdCreated);
+
+                    const tdStart = document.createElement("td");
+                    if (it.startLat != null && it.startLng != null) {
+                        tdStart.textContent =
+                            it.startLat.toFixed(5) + ", " + it.startLng.toFixed(5);
+                    } else {
+                        tdStart.textContent = "-";
+                    }
+                    tr.appendChild(tdStart);
+
+                    const tdMode = document.createElement("td");
+                    tdMode.textContent = it.travelMode || "-";
+                    tr.appendChild(tdMode);
+
+                    const tdCount = document.createElement("td");
+                    let poiCount = "";
+                    if (it.optimizedRouteJson) {
+                        try {
+                            const arr = JSON.parse(it.optimizedRouteJson);
+                            if (Array.isArray(arr)) {
+                                poiCount = arr.length;
+                            }
+                        } catch (e) {
+                            poiCount = "?";
+                        }
+                    } else {
+                        poiCount = "-";
+                    }
+                    tdCount.textContent = poiCount;
+                    tr.appendChild(tdCount);
+
+                    const tdActions = document.createElement("td");
+                    tdActions.className = "actions";
+
+                    const btnMap = document.createElement("button");
+                    btnMap.textContent = "Térképen";
+                    btnMap.className = "primary";
+                    btnMap.addEventListener("click", () => {
+                        window.open(`map.html?id=${it.id}`, "_blank");
+                    });
+                    tdActions.appendChild(btnMap);
+
+                    const btnDel = document.createElement("button");
+                    btnDel.textContent = "Törlés";
+                    btnDel.className = "secondary";
+                    btnDel.addEventListener("click", () => deleteItinerary(apiBase, it.id));
+                    tdActions.appendChild(btnDel);
+
+                    tr.appendChild(tdActions);
+                    tableBody.appendChild(tr);
+                }
+
+                statusDiv.textContent = `Összesen ${list.length} útvonal.`;
+            } catch (err) {
+                console.error(err);
+                statusDiv.textContent =
+                    "Hiba a betöltés során. Ellenőrizd az API címet és hogy fut-e a backend.";
+            }
+        }
+
+        async function deleteItinerary(apiBase, id) {
+            if (!confirm(`Biztosan törlöd az útvonalat? (id=${id})`)) {
+                return;
+            }
+
+            try {
+                const resp = await fetch(`${apiBase}/api/itineraries/${id}`, {
+                    method: "DELETE"
+                });
+
+                if (!resp.ok) {
+                    let msg = "";
+                    try {
+                        const data = await resp.json();
+                        msg = data.error || "";
+                    } catch { }
+                    alert("Hiba a törlés során: " + (msg || resp.status));
+                    return;
+                }
+
+                loadItineraries(false);
+            } catch (err) {
+                console.error(err);
+                alert("Hiba a törlés során (network/JS hiba).");
+            }
+        }
+
+        loadBtn.addEventListener("click", () => loadItineraries(true));
+        refreshBtn.addEventListener("click", () => loadItineraries(true));
+        searchInput.addEventListener("keyup", (e) => {
+            if (e.key === "Enter") loadItineraries(true);
+        });
+        onlyMineCheckbox.addEventListener("change", () => loadItineraries(true));
+
+        loadItineraries(true);
+    </script>
+
+    <script src="navbar.js"></script>
+
+</body>
+</html>

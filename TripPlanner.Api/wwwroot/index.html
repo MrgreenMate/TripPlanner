@@ -1,0 +1,333 @@
+﻿<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>TripPlanner – AI alapú utazástervező</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .page {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: #1976d2;
+            color: white;
+            padding: 16px 24px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+            header h1 {
+                margin: 0;
+                font-size: 24px;
+            }
+
+        .layout {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 18px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            max-width: 420px;
+            flex: 1;
+            min-width: 300px;
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+
+        label {
+            font-weight: bold;
+            display: block;
+            margin-top: 10px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 6px 8px;
+            margin-top: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 8px 14px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: none;
+            font-size: 14px;
+        }
+
+            button.primary {
+                background: #1976d2;
+                color: white;
+            }
+
+            button.secondary {
+                background: #eee;
+            }
+
+        .status {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #444;
+        }
+
+        .nav-buttons button {
+            display: block;
+            width: 100%;
+            margin-top: 6px;
+            text-align: left;
+        }
+
+        
+        .navbar {
+            background: #1976d2;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            color: white;
+        }
+
+        .nav-left {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+            .nav-link:hover {
+                background: rgba(255,255,255,0.15);
+            }
+
+            .nav-link.active {
+                background: white;
+                color: #1976d2;
+                font-weight: bold;
+            }
+
+        .nav-user {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .nav-user-guest {
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="navbar-root"></div>
+
+    <div class="page">
+
+        <header>
+            <h1>TripPlanner – AI alapú utazástervező</h1>
+            <small>
+                Felhasználók kezelése, AI-alapú útvonaltervezés és látnivalók felfedezése egy helyen.
+            </small>
+        </header>
+
+        <main>
+            <div class="layout">
+
+                <!-- BEJELENTKEZÉS / USER LÉTREHOZÁS -->
+                <div class="card">
+                    <h2>Bejelentkezés név alapján</h2>
+
+                    <p style="font-size:13px; color:#555;">
+                        Adj meg egy nevet, és létrehozunk neked egy profilt.
+                        A hozzád tartozó útvonalak és AI-beállítások ehhez a felhasználóhoz lesznek elmentve.
+                    </p>
+
+                    <label>Felhasználónév</label>
+                    <input id="userName" type="text" placeholder="pl. Máté">
+
+                    <button class="primary" onclick="login()">Belépés / Létrehozás</button>
+                    <button class="secondary" onclick="logout()">Kijelentkezés</button>
+
+                    <div class="status" id="loginStatus">Adj meg egy nevet a kezdéshez.</div>
+                </div>
+
+                <!--  ALKALMAZÁS FUNKCIÓI -->
+                <div class="card" id="navCard" style="display:none;">
+                    <h2>Fő funkciók</h2>
+
+                    <p id="currentUserInfo" style="font-size:13px; margin-bottom:10px;"></p>
+
+                    <div class="nav-buttons">
+                        <button class="primary" onclick="openPage('new-itinerary.html')">🧠 Új AI útvonal generálása</button>
+                        <button class="primary" onclick="openPage('itineraries.html')">📋 Korábbi útvonalak</button>
+                        <button class="primary" onclick="openPage('user-preferences.html')">⚙️ AI viselkedésének beállítása</button>
+                    </div>
+
+                    <p class="status">
+                        Minden útvonal és AI beállítás a bejelentkezett felhasználóhoz kapcsolódik.
+                    </p>
+                </div>
+
+                <!-- USER LISTA -->
+                <div class="card">
+                    <h2>Felhasználók listája</h2>
+
+                    <p style="font-size:13px; color:#555;">
+                        Itt láthatod, kik hoztak már létre profilt a rendszerben.
+                    </p>
+
+                    <div style="display:flex; gap:8px; margin-bottom:8px;">
+                        <input id="userSearch" type="text" placeholder="Keresés név vagy email szerint" style="flex:1;">
+                        <button class="secondary" onclick="loadUsers()">Frissítés</button>
+                    </div>
+
+                    <div id="userList" class="status">Nincs adat</div>
+                </div>
+
+            </div>
+        </main>
+
+    </div>
+
+    <script src="config.js"></script>
+
+    <script>
+        const API_BASE = window.TP_CONFIG.apiBase;
+        const STORAGE_KEY_USER_ID = window.TP_CONFIG.storageUserIdKey;
+        const STORAGE_KEY_USER_NAME = window.TP_CONFIG.storageUserNameKey;
+
+        function refreshUiFromStorage() {
+            const uid = localStorage.getItem(STORAGE_KEY_USER_ID);
+            const uname = localStorage.getItem(STORAGE_KEY_USER_NAME) || "";
+
+            const status = document.getElementById("loginStatus");
+            const navCard = document.getElementById("navCard");
+            const info = document.getElementById("currentUserInfo");
+
+            if (uid) {
+                navCard.style.display = "block";
+                info.innerText = `Bejelentkezve: ${uname} (id=${uid})`;
+                status.innerText = "Sikeres bejelentkezés.";
+            } else {
+                navCard.style.display = "none";
+                info.innerText = "";
+                status.innerText = "Nem vagy bejelentkezve.";
+            }
+        }
+
+        async function login() {
+            const name = (document.getElementById("userName").value || "").trim();
+            const status = document.getElementById("loginStatus");
+
+            if (!name) {
+                alert("Adj meg egy felhasználónevet!");
+                return;
+            }
+
+            status.innerText = "Csatlakozás / felhasználó létrehozása...";
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/users`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name })
+                });
+
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    status.innerText = "Hiba: " + (data.error || resp.status);
+                    return;
+                }
+
+                localStorage.setItem(STORAGE_KEY_USER_ID, data.id);
+                localStorage.setItem(STORAGE_KEY_USER_NAME, data.name);
+
+                refreshUiFromStorage();
+                loadUsers();
+            }
+            catch (err) {
+                console.error(err);
+                status.innerText = "Hálózati hiba!";
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem(STORAGE_KEY_USER_ID);
+            localStorage.removeItem(STORAGE_KEY_USER_NAME);
+            refreshUiFromStorage();
+        }
+
+        async function loadUsers() {
+            const div = document.getElementById("userList");
+            const search = (document.getElementById("userSearch").value || "").trim();
+
+            div.innerText = "Betöltés...";
+
+            let url = `${API_BASE}/api/users`;
+            if (search.length > 0)
+                url += `?search=${encodeURIComponent(search)}`;
+
+            try {
+                const resp = await fetch(url);
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    div.innerText = "Hiba: " + (data.error || resp.status);
+                    return;
+                }
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    div.innerText = "Nincs felhasználó.";
+                    return;
+                }
+
+                div.innerHTML = data
+                    .map(u =>
+                        `<div><b>${u.name}</b> (id=${u.id})<br>
+                         <small style="color:#666;">${u.email || ""}</small>
+                         </div><hr>`
+                    )
+                    .join("");
+            } catch (err) {
+                console.error(err);
+                div.innerText = "Nem sikerült lekérni a felhasználókat.";
+            }
+        }
+
+        function openPage(page) {
+            window.location.href = page;
+        }
+
+        refreshUiFromStorage();
+        loadUsers();
+    </script>
+
+    <script src="navbar.js"></script>
+</body>
+</html>

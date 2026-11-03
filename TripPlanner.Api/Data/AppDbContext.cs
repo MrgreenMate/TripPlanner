@@ -7,15 +7,16 @@ namespace TripPlanner.Api.Data
     {
         public AppDbContext(DbContextOptions<AppDbContext> opts) : base(opts) { }
 
-        public DbSet<User> Users => Set<User>();
-        public DbSet<Poi> Pois => Set<Poi>();
-        public DbSet<Itinerary> Itineraries => Set<Itinerary>();
-        public DbSet<Review> Reviews => Set<Review>();
+        public DbSet<Poi> Pois { get; set; } = null!;
+        public DbSet<Itinerary> Itineraries { get; set; } = null!;
+        public DbSet<User> Users { get; set; } = null!;
+        public DbSet<Review> Reviews { get; set; } = null!;
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-            // Egyedi konfigurációk ha kell
+     
         }
     }
 }

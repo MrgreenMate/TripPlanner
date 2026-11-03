@@ -1,0 +1,493 @@
+﻿<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>Új útvonal létrehozása – TripPlanner</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .page {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        label {
+            font-weight: bold;
+            display: block;
+            margin-top: 12px;
+        }
+
+        input, select {
+            padding: 5px 8px;
+            font-size: 14px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 7px 14px;
+            margin-top: 15px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: none;
+            background: #1976d2;
+            color: white;
+        }
+
+        .section {
+            margin: 16px 0;
+            padding: 15px 18px;
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+
+        .status {
+            margin-top: 10px;
+            color: #444;
+            font-size: 13px;
+        }
+
+        small {
+            color: #666;
+        }
+
+       
+        .navbar {
+            background: #1976d2;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            color: white;
+        }
+
+        .nav-left {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+            .nav-link:hover {
+                background: rgba(255,255,255,0.15);
+            }
+
+            .nav-link.active {
+                background: white;
+                color: #1976d2;
+                font-weight: bold;
+            }
+
+        .nav-user {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .nav-user-guest {
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- NAVBAR helye -->
+    <div id="navbar-root"></div>
+
+    <div class="page">
+        <h1>Útvonal generálása</h1>
+        <p id="userInfo" style="font-size:14px; color:#333;"></p>
+
+        <!-- API BASE -->
+        <div class="section">
+            <label>API base URL:</label>
+            <input id="apiBase" type="text" value="http://localhost:5130">
+            <div class="status" id="prefsStatus"></div>
+        </div>
+
+        <!-- INDULÁSI HELY -->
+        <div class="section">
+            <label>Indulási hely (cím vagy helyszín)</label>
+            <input id="startAddress" placeholder="pl. Deák Ferenc tér, Budapest">
+            <small>Nem kell koordinátát tudnod, automatikusan geokódoljuk.</small>
+
+            <!-- Hidden értékek -->
+            <input id="startLat" type="hidden">
+            <input id="startLng" type="hidden">
+
+            <button onclick="geocodeAddress()">Cím geokódolása</button>
+            <div class="status" id="startStatus"></div>
+        </div>
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+            <label>Nincsenek helyek a környéken?</label>
+            <button onclick="autoImportPois()" style="background-color: #2e7d32;">🌍 Környék felfedezése AI-val</button>
+            <div class="status" id="importStatus"></div>
+        </div>
+
+        <!-- POI LISTA -->
+      <!-- POI LISTA -->
+<div class="section">
+    <label>Környékbeli látványosságok (Kézi összeállításhoz)</label>
+    <div id="poiBox">
+        <p style="color: #666; font-size: 13px; font-style: italic; margin-top: 5px;">
+            A helyek listája automatikusan megjelenik, amint megadod az indulási helyet.
+        </p>
+    </div>
+    <div class="status" id="poiStatus"></div>
+</div>
+
+
+
+        <!-- OPTIMALIZÁLÁS -->
+        <!-- OPTIMALIZÁLÁS -->
+<div class="section">
+    <h3>Kézi útvonal generálás</h3>
+    
+    <!-- Rejtett mező: A felhasználó elől elrejtjük, a rendszer fixen a Genetikus Algoritmust használja a sorrendhez -->
+    <input type="hidden" id="mode" value="genetic">
+
+   <!-- OPTIMALIZÁLÁS -->
+        <div class="section">
+            <h3>Kézi útvonal generálás</h3>
+            
+            <!-- Rejtett mező: A rendszer fixen a Genetikus Algoritmust használja -->
+            <input type="hidden" id="mode" value="genetic">
+
+            <label>Utazási mód (Térképhez)</label>
+            <select id="travelMode" class="form-select mb-3">
+                <option value="walk">Séta</option>
+                <option value="drive">Vezetés</option>
+            </select>
+
+            <button onclick="generateManual()">Útvonal generálása (kézi)</button>
+            <div class="status" id="genStatusManual"></div>
+        </div>
+        <!-- AI GENERÁLÁS -->
+        <div class="section">
+            <h3>AI automata felfedezés + optimalizálás</h3>
+
+            <label>Sugár (km)</label>
+            <input id="radiusKm" value="3.0">
+
+            <label>Max POI szám</label>
+            <input id="maxPois" value="6">
+
+            <button onclick="autoDiscoverAndGenerate()">AI felfedezés + automata útvonal</button>
+            <div class="status" id="genStatusAuto"></div>
+        </div>
+    </div>
+
+    <!-- SCRIPT BLOKK -->
+    <script>
+        // USER ID / USER NAME betöltése
+        const STORAGE_KEY_USER_ID = "tp_userId";
+        const STORAGE_KEY_USER_NAME = "tp_userName";
+
+        let currentUserId = 1;
+
+        (function initializeUser() {
+            const stored = localStorage.getItem(STORAGE_KEY_USER_ID);
+            if (stored) {
+                currentUserId = parseInt(stored, 10);
+                const uname = localStorage.getItem(STORAGE_KEY_USER_NAME) || "";
+                document.getElementById("userInfo").innerText =
+                    "Bejelentkezett felhasználó: " + (uname || "User") + " (ID=" + currentUserId + ")";
+            } else {
+                document.getElementById("userInfo").innerText =
+                    "⚠️ Nincs bejelentkezett felhasználó – userId = 1 lesz használva.";
+            }
+            loadPreferencesToWeights();
+        })();
+
+
+        //  PREFERENCIÁK BETÖLTÉSE 
+       async function loadPreferencesToWeights() {
+    const apiBase = document.getElementById("apiBase").value;
+    const status = document.getElementById("prefsStatus");
+
+    status.innerText = "AI beállítások betöltése...";
+
+    try {
+        const resp = await fetch(`${apiBase}/api/users/${currentUserId}/preferences`);
+
+        if (!resp.ok) {
+            status.innerText = "Nem sikerült betölteni a preferenciákat (" + resp.status + ")";
+            return;
+        }
+
+        const data = await resp.json();
+
+        const maxPoisInput = document.getElementById("maxPois");
+
+        if (maxPoisInput && data.maxPoiCount != null) {
+            maxPoisInput.value = data.maxPoiCount;
+        }
+
+        status.innerText = "AI beállítások betöltve.";
+    } catch (err) {
+        console.error("Preferencia betöltési hiba:", err);
+        status.innerText = "Hiba történt a preferenciák betöltésekor.";
+    }
+}
+
+        //  POI LISTA 
+  
+       async function loadPois() {
+    // 1. ÚJ SOR: Kiolvassuk a backend pontos címét (localhost:5130)
+    const apiBase = document.getElementById("apiBase").value;
+    
+    const lat = document.getElementById("startLat").value;
+    const lng = document.getElementById("startLng").value;
+    const radius = document.getElementById("radiusKm") ? document.getElementById("radiusKm").value : 5.0;
+
+    if (!lat || !lng) {
+        alert("Kérlek, először add meg a kiindulási pontot (Szélesség és Hosszúság) a POI-k betöltéséhez!");
+        return;
+    }
+
+    try {
+        // 2. JAVÍTOTT SOR: Beleraktuk az ${apiBase}-t a webcím elejébe!
+        const response = await fetch(`${apiBase}/api/pois/nearby?lat=${lat}&lng=${lng}&radiusKm=${radius}`);
+        
+        if (!response.ok) throw new Error("Hiba a POI-k betöltésekor");
+        
+        const pois = await response.json();
+        
+        const container = document.getElementById("poiBox"); 
+        container.innerHTML = ""; 
+        
+        if (pois.length === 0) {
+            container.innerHTML = "<p class='text-muted mt-2'>Nincs találat a megadott körzetben.</p>";
+            return;
+        }
+
+        pois.forEach(poi => {
+            container.innerHTML += `
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" value="${poi.id}" id="poi_${poi.id}">
+                    <label class="form-check-label" for="poi_${poi.id}">
+                        <strong>${poi.name}</strong> <small class="text-muted">(${poi.priority}⭐)</small>
+                    </label>
+                </div>
+            `;
+        });
+    } catch (error) {
+        console.error(error);
+        alert("Sikertelen betöltés.");
+    }
+}
+       //  CÍM → KOORDINÁTA GEOKÓDOLÁS ÉS AUTOMATIKUS POI BETÖLTÉS
+        async function geocodeAddress() {
+            const address = document.getElementById("startAddress").value.trim();
+            const status = document.getElementById("startStatus");
+
+            if (!address) {
+                alert("Adj meg egy címet vagy helyszínt!");
+                return;
+            }
+
+            status.innerText = "Geokódolás...";
+
+            try {
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+
+                const resp = await fetch(url, { headers: { "Accept-Language": "hu" } });
+                const data = await resp.json();
+
+                if (!data.length) {
+                    status.innerText = "Nem találtam koordinátát ehhez a címhez.";
+                    return;
+                }
+
+                const best = data[0];
+                document.getElementById("startLat").value = best.lat;
+                document.getElementById("startLng").value = best.lon;
+
+                status.innerText = `Talált koordináta: ${parseFloat(best.lat).toFixed(5)}, ${parseFloat(best.lon).toFixed(5)}. Helyek betöltése...`;
+
+                // ÚJ LÉPÉS: Amint megvan a koordináta, azonnal lekérjük az adott körzet POI-jait is!
+                await loadPois();
+                
+            } catch {
+                status.innerText = "Hiba történt a geokódolás során.";
+            }
+        }
+
+
+        // Ensure van start koordináta
+        async function ensureStartCoords() {
+            const lat = parseFloat(document.getElementById("startLat").value);
+            const lng = parseFloat(document.getElementById("startLng").value);
+            const addr = document.getElementById("startAddress").value.trim();
+
+            if (!isNaN(lat) && !isNaN(lng)) return true;
+            if (!addr) {
+                alert("Adj meg indulási helyet!");
+                return false;
+            }
+
+            await geocodeAddress();
+
+            const newLat = parseFloat(document.getElementById("startLat").value);
+            const newLng = parseFloat(document.getElementById("startLng").value);
+
+            return !isNaN(newLat) && !isNaN(newLng);
+        }
+
+
+        //  KÉZI OPTIMALIZÁLÁS 
+     async function generateManual() {
+            // 1. Ellenőrizzük, megvannak-e a koordináták
+            if (!(await ensureStartCoords())) return;
+
+            const apiBase = document.getElementById("apiBase").value;
+            const genStatus = document.getElementById("genStatusManual");
+
+            // 2. Összeszedjük a bepipált POI-kat a poiBox-ból
+            const selectedCheckboxes = document.querySelectorAll("#poiBox input[type='checkbox']:checked");
+            const pois = [...selectedCheckboxes].map(x => parseInt(x.value));
+
+            if (!pois.length) {
+                alert("Válassz legalább egy látványosságot a listából!");
+                return;
+            }
+
+            // 3. Összeállítjuk a kérést az ÚJ struktúra szerint
+            const req = {
+                userId: currentUserId,
+                poiIds: pois,
+                startLat: parseFloat(document.getElementById("startLat").value),
+                startLng: parseFloat(document.getElementById("startLng").value),
+                mode: document.getElementById("mode").value, // Ez a rejtett "genetic" mező
+                travelMode: document.getElementById("travelMode").value, // Ez az új, közös legördülő
+                // A súlyokat fix 1.0-ra állítjuk, mivel a felületről eltűntek
+                weightDistance: 1.0,
+                weightPriority: 1.0
+            };
+
+            genStatus.innerText = "Útvonal generálása (Genetikus algoritmus)...";
+
+            try {
+                const resp = await fetch(`${apiBase}/api/itineraries/optimize`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(req)
+                });
+
+                const data = await resp.json();
+                if (!resp.ok) {
+                    genStatus.innerText = "Hiba: " + (data.error || resp.status);
+                    return;
+                }
+
+                genStatus.innerHTML = `Siker! Útvonal ID: <b>${data.id}</b>`;
+                // Megnyitjuk a térképet
+                window.open(`map.html?id=${data.id}`, "_blank");
+
+            } catch (err) {
+                console.error(err);
+                genStatus.innerText = "Hiba történt a küldés során.";
+            }
+}
+
+
+        //  AI DISCOVER + OPTIMALIZÁLÁS 
+        async function autoDiscoverAndGenerate() {
+            if (!(await ensureStartCoords())) return;
+
+            const apiBase = document.getElementById("apiBase").value;
+            const genStatus = document.getElementById("genStatusAuto");
+
+            const req = {
+                userId: currentUserId,
+                startLat: parseFloat(document.getElementById("startLat").value),
+                startLng: parseFloat(document.getElementById("startLng").value),
+                radiusKm: parseFloat(document.getElementById("radiusKm").value),
+                maxPois: parseInt(document.getElementById("maxPois").value),
+                mode: "ai",
+                travelMode: document.getElementById("travelMode").value
+            };
+
+            genStatus.innerText = "AI felfedezés + generálás...";
+
+            try {
+                const resp = await fetch(`${apiBase}/api/itineraries/discover-optimize`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(req)
+                });
+
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    genStatus.innerText = "Hiba: " + (data.error || resp.status);
+                    return;
+                }
+
+                genStatus.innerHTML = `Siker! Útvonal ID: <b>${data.id}</b>`;
+                window.open(`map.html?id=${data.id}`, "_blank");
+
+            } catch {
+                genStatus.innerText = "Hiba történt.";
+            }
+        }
+        async function autoImportPois() {
+    // Ellenőrizzük, hogy van-e már koordináta
+    if (!(await ensureStartCoords())) return;
+
+    const apiBase = document.getElementById("apiBase").value;
+    const lat = document.getElementById("startLat").value;
+    const lng = document.getElementById("startLng").value;
+    const statusDiv = document.getElementById("importStatus");
+
+    statusDiv.innerText = "Környék szkennelése és AI importálás folyamatban (ez beletelhet 10-20 másodpercbe)...";
+
+    try {
+        const resp = await fetch(`${apiBase}/api/pois/auto-import?lat=${lat}&lng=${lng}`, {
+            method: "POST"
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok) {
+            statusDiv.innerText = "Hiba történt: " + (data.message || resp.status);
+            return;
+        }
+
+        statusDiv.innerHTML = `<b>${data.message}</b> ${data.importedCount ? `(${data.importedCount} új hely mentve).` : ""}`;
+        
+        // Frissítsük a POI listát, hogy a felhasználó rögtön lássa az új helyeket!
+        loadPois();
+        
+    } catch (err) {
+        console.error(err);
+        statusDiv.innerText = "Hálózati hiba az importálás során.";
+    }
+}
+    </script>
+
+   
+    <script src="navbar.js"></script>
+
+</body>
+</html>

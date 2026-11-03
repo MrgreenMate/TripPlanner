@@ -1,0 +1,345 @@
+﻿<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>AI beállítások – TripPlanner</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background: #f5f5f5;
+        }
+
+        .page {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin: 12px 0;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        input[type="number"],
+        input[type="url"] {
+            width: 100%;
+            padding: 6px 8px;
+            box-sizing: border-box;
+            margin-top: 4px;
+        }
+
+        button {
+            padding: 7px 14px;
+            margin-top: 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: none;
+            font-size: 14px;
+        }
+
+            button.primary {
+                background: #1976d2;
+                color: #fff;
+            }
+
+            button.secondary {
+                background: #eee;
+            }
+
+        .status {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #444;
+        }
+
+        .preset-buttons button {
+            margin-right: 6px;
+            margin-top: 4px;
+        }
+
+      
+        .navbar {
+            background: #1976d2;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            color: white;
+        }
+
+        .nav-left {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+            .nav-link:hover {
+                background: rgba(255,255,255,0.15);
+            }
+
+            .nav-link.active {
+                background: white;
+                color: #1976d2;
+                font-weight: bold;
+            }
+
+        .nav-user {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .nav-user-guest {
+            font-style: italic;
+        }
+        .pref-row {
+            margin-bottom: 18px;
+        }
+
+            .pref-row label {
+                font-weight: bold;
+                display: block;
+                margin-bottom: 4px;
+            }
+
+        .value-label {
+            margin-left: 8px;
+            font-size: 14px;
+            color: #1976d2;
+            font-weight: bold;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="navbar-root"></div>
+
+    <div class="page">
+        <h1>AI beállítások</h1>
+        <p style="font-size:13px; color:#555;">
+            Itt tudod beállítani, hogyan gondolkodjon az AI az útvonaltervezésnél.
+            A súlyok határozzák meg, mennyire fontos a rövidebb séta, a POI-k fontossága
+            és az értékelések.
+        </p>
+
+        <div class="card">
+            <h2>API cím (haladó)</h2>
+            <label>API base URL</label>
+            <input id="apiBase" type="url" />
+            <small style="display:block; font-size:12px; color:#666; margin-top:4px;">
+                Általában nem kell módosítanod. Itt állítható be, melyik TripPlanner API-t használjuk.
+            </small>
+        </div>
+
+        <div class="card">
+            <h2>Aktuális felhasználó</h2>
+            <p id="userInfo" style="font-size:13px;"></p>
+        </div>
+
+        <div class="card">
+            <h2>AI viselkedésének finomhangolása</h2>
+
+            <div class="preset-buttons">
+                <p style="font-size:13px; color:#555; margin-top:0;">
+                    Gyors előbeállítások:
+                </p>
+                <button class="secondary" onclick="presetShortWalk()">🚶‍♂️ Minél kevesebb séta</button>
+                <button class="secondary" onclick="presetTopRated()">⭐ Top rated turista</button>
+                <button class="secondary" onclick="presetSeeEverything()">📸 Mindent látni akarok</button>
+            </div>
+
+            <div class="pref-row">
+                <label>Távolság súlya</label>
+                <input id="weightDistance" type="range" min="0" max="2" step="0.01"
+                       oninput="updateLabel('weightDistance')" />
+                <span id="weightDistanceLabel" class="value-label">1.0</span>
+            </div>
+
+            <div class="pref-row">
+                <label>Prioritás súlya</label>
+                <input id="weightPriority" type="range" min="0" max="2" step="0.01"
+                       oninput="updateLabel('weightPriority')" />
+                <span id="weightPriorityLabel" class="value-label">1.0</span>
+            </div>
+
+
+
+
+            <button class="primary" onclick="savePreferences()">Beállítások mentése</button>
+
+            <div class="status" id="prefStatus"></div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+
+    <script>
+        const STORAGE_KEY_USER_ID = window.TP_CONFIG.storageUserIdKey;
+        const STORAGE_KEY_USER_NAME = window.TP_CONFIG.storageUserNameKey;
+
+        const apiBaseInput = document.getElementById("apiBase");
+        const userInfo = document.getElementById("userInfo");
+        const statusDiv = document.getElementById("prefStatus");
+
+        const weightDistanceInput = document.getElementById("weightDistance");
+        const weightPriorityInput = document.getElementById("weightPriority");
+        const weightRatingInput = document.getElementById("weightRating");
+        const maxPoisInput = document.getElementById("maxPois");
+
+        apiBaseInput.value = window.TP_CONFIG.apiBase;
+
+        function getApiBase() {
+            return (apiBaseInput.value || "").trim() || window.TP_CONFIG.apiBase;
+        }
+
+        let currentUserId = null;
+
+        (function initUser() {
+            const uid = localStorage.getItem(STORAGE_KEY_USER_ID);
+            const uname = localStorage.getItem(STORAGE_KEY_USER_NAME) || "";
+
+            if (uid) {
+                currentUserId = parseInt(uid, 10);
+                userInfo.innerText = `Bejelentkezve: ${uname || "Felhasználó"} (id=${uid})`;
+                loadPreferences();
+            } else {
+                currentUserId = null;
+                userInfo.innerHTML =
+                    "⚠️ Nem vagy bejelentkezve. A beállítások mentéséhez előbb jelentkezz be a kezdőlapon.";
+            }
+        })();
+
+        async function loadPreferences() {
+            if (!currentUserId) return;
+
+            const apiBase = getApiBase();
+            statusDiv.innerText = "Beállítások betöltése...";
+
+            try {
+                const resp = await fetch(`${apiBase}/api/users/${currentUserId}/preferences`);
+                if (resp.status === 404) {
+                    statusDiv.innerText = "Még nincsenek elmentett beállításaid. Használd a gombokat vagy a mezőket, majd mentsd el.";
+                    return;
+                }
+
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    statusDiv.innerText = "Hiba a beállítások betöltésekor: " + (data.error || resp.status);
+                    return;
+                }
+
+                if (data.weightDistance != null) weightDistanceInput.value = data.weightDistance;
+                if (data.weightPriority != null) weightPriorityInput.value = data.weightPriority;
+                if (data.weightRating != null) weightRatingInput.value = data.weightRating;
+                if (data.maxPois != null) maxPoisInput.value = data.maxPois;
+
+                statusDiv.innerText = "Beállítások betöltve.";
+            } catch (err) {
+                console.error(err);
+                statusDiv.innerText = "Nem sikerült betölteni a beállításokat.";
+            }
+        }
+
+        async function savePreferences() {
+            if (!currentUserId) {
+                alert("Először jelentkezz be a kezdőlapon.");
+                return;
+            }
+
+            const apiBase = getApiBase();
+            statusDiv.innerText = "Beállítások mentése...";
+
+            const body = {
+                weightDistance: parseFloat(weightDistanceInput.value) || 1.0,
+                weightPriority: parseFloat(weightPriorityInput.value) || 1.0,
+                weightRating: parseFloat(weightRatingInput.value) || 1.0,
+                maxPois: parseInt(maxPoisInput.value, 10) || 10
+            };
+
+            try {
+                const resp = await fetch(`${apiBase}/api/users/${currentUserId}/preferences`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await resp.json().catch(() => ({}));
+
+                if (!resp.ok) {
+                    statusDiv.innerText = "Hiba a mentés során: " + (data.error || resp.status);
+                    return;
+                }
+
+                statusDiv.innerText = "Beállítások elmentve.";
+            } catch (err) {
+                console.error(err);
+                statusDiv.innerText = "Nem sikerült elmenteni a beállításokat.";
+            }
+        }
+        function updateLabel(id) {
+            const el = document.getElementById(id);
+            const label = document.getElementById(id + "Label");
+            if (el && label) {
+                label.innerText = el.value;
+            }
+        }
+
+
+        // Presetek
+
+        function presetShortWalk() {
+            weightDistanceInput.value = 2.0;
+            weightPriorityInput.value = 1.0;
+            weightRatingInput.value = 1.0;
+            maxPoisInput.value = 6;
+            statusDiv.innerText = "„Minél kevesebb séta” preset beállítva. Ne felejtsd el elmenteni!";
+        }
+
+        function presetTopRated() {
+            weightDistanceInput.value = 1.0;
+            weightPriorityInput.value = 1.0;
+            weightRatingInput.value = 2.0;
+            maxPoisInput.value = 8;
+            statusDiv.innerText = "„Top rated turista” preset beállítva. Ne felejtsd el elmenteni!";
+        }
+
+        function presetSeeEverything() {
+            weightDistanceInput.value = 0.8;
+            weightPriorityInput.value = 1.5;
+            weightRatingInput.value = 1.2;
+            maxPoisInput.value = 15;
+            statusDiv.innerText = "„Mindent látni akarok” preset beállítva. Ne felejtsd el elmenteni!";
+        }
+
+    </script>
+
+    <script src="navbar.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,359 @@
+﻿<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>POI értékelések – TripPlanner</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .page {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin: 12px 0;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-top: 8px;
+        }
+
+        select, textarea, input[type="text"] {
+            width: 100%;
+            padding: 6px 8px;
+            box-sizing: border-box;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        textarea {
+            min-height: 80px;
+        }
+
+        button {
+            padding: 7px 14px;
+            margin-top: 10px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: none;
+            font-size: 14px;
+        }
+
+            button.primary {
+                background: #1976d2;
+                color: #fff;
+            }
+
+        .status {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #444;
+        }
+
+        .review-item {
+            border-bottom: 1px solid #eee;
+            padding: 8px 0;
+        }
+
+        .review-meta {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .rating-stars {
+            color: #ff9800;
+            font-weight: bold;
+        }
+
+       
+        .navbar {
+            background: #1976d2;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            color: white;
+        }
+
+        .nav-left {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+            .nav-link:hover {
+                background: rgba(255,255,255,0.15);
+            }
+
+            .nav-link.active {
+                background: white;
+                color: #1976d2;
+                font-weight: bold;
+            }
+
+        .nav-user {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .nav-user-guest {
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="navbar-root"></div>
+
+    <div class="page">
+        <h1 id="poiTitle">POI értékelések</h1>
+        <p id="poiSubtitle" style="font-size:14px; color:#555;"></p>
+
+        <div class="card">
+            <h2>API cím (haladó)</h2>
+            <label>API base URL</label>
+            <input id="apiBase" type="url" />
+            <small style="display:block; font-size:12px; color:#666; margin-top:4px;">
+                Általában nem kell módosítanod. Itt állítható be, melyik TripPlanner API-t használjuk.
+            </small>
+        </div>
+
+        <div class="card">
+            <h2>Összesített értékelés</h2>
+            <p style="font-size:13px; color:#555;">
+                Itt láthatod, hogy a felhasználók átlagosan hány csillagra értékelték ezt a helyet.
+            </p>
+            <div id="summary">Betöltés...</div>
+        </div>
+
+        <div class="card">
+            <h2>Értékelések</h2>
+            <div id="reviewsList">Betöltés...</div>
+        </div>
+
+        <div class="card">
+            <h2>Új értékelés küldése</h2>
+            <p id="userInfo" style="font-size:13px;"></p>
+
+            <label>Értékelés (1–5 csillag)</label>
+            <select id="rating">
+                <option value="5">5 – Nagyon jó</option>
+                <option value="4">4 – Jó</option>
+                <option value="3">3 – Közepes</option>
+                <option value="2">2 – Gyenge</option>
+                <option value="1">1 – Rossz</option>
+            </select>
+
+            <label>Megjegyzés (nem kötelező)</label>
+            <textarea id="comment" placeholder="Írd le a tapasztalataidat..."></textarea>
+
+            <button class="primary" onclick="submitReview()">Értékelés elküldése</button>
+
+            <div class="status" id="formStatus"></div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+
+    <script>
+        const STORAGE_KEY_USER_ID = window.TP_CONFIG.storageUserIdKey;
+        const STORAGE_KEY_USER_NAME = window.TP_CONFIG.storageUserNameKey;
+        const apiBaseInput = document.getElementById("apiBase");
+
+        apiBaseInput.value = window.TP_CONFIG.apiBase;
+
+        function getApiBase() {
+            return (apiBaseInput.value || "").trim() || window.TP_CONFIG.apiBase;
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const poiId = parseInt(params.get("poiId") || "0", 10);
+
+        let currentUserId = null;
+        let currentUserName = "";
+
+        (function initUser() {
+            const uid = localStorage.getItem(STORAGE_KEY_USER_ID);
+            const uname = localStorage.getItem(STORAGE_KEY_USER_NAME) || "";
+
+            if (uid) {
+                currentUserId = parseInt(uid, 10);
+                currentUserName = uname || "Felhasználó";
+                document.getElementById("userInfo").innerText =
+                    `Bejelentkezve: ${currentUserName} (id=${currentUserId})`;
+            } else {
+                document.getElementById("userInfo").innerText =
+                    "⚠️ Nem vagy bejelentkezve – az értékelés userId nélkül fog elmentődni.";
+            }
+        })();
+
+        if (!poiId) {
+            alert("Hiányzó poiId paraméter! pl.: poi-reviews.html?poiId=1");
+        }
+
+        // POI neve
+        async function loadPoi() {
+            const apiBase = getApiBase();
+            try {
+                const resp = await fetch(`${apiBase}/api/pois/${poiId}`);
+                const data = await resp.json();
+                if (!resp.ok) {
+                    document.getElementById("poiTitle").innerText = "Ismeretlen POI";
+                    document.getElementById("poiSubtitle").innerText = "";
+                    return;
+                }
+                document.getElementById("poiTitle").innerText = data.name || `POI #${poiId}`;
+                document.getElementById("poiSubtitle").innerText =
+                    `ID: ${data.id} • Prioritás: ${data.priority}`;
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // Summary (átlag + darabszám)
+        async function loadSummary() {
+            const apiBase = getApiBase();
+            const div = document.getElementById("summary");
+            div.innerText = "Betöltés...";
+
+            try {
+                const resp = await fetch(`${apiBase}/api/pois/${poiId}/rating-summary`);
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    div.innerText = "Hiba: " + (data.error || resp.status);
+                    return;
+                }
+
+                if (!data.count || data.count === 0) {
+                    div.innerHTML = "Még nincs értékelés ehhez a helyhez.";
+                    return;
+                }
+
+                div.innerHTML = `
+                    Átlagos értékelés:
+                    <span class="rating-stars">⭐ ${data.average.toFixed(1)}</span>
+                    (${data.count} értékelés)
+                `;
+            } catch (err) {
+                console.error(err);
+                div.innerText = "Nem sikerült betölteni az összesítést.";
+            }
+        }
+
+        // Review lista
+        async function loadReviews() {
+            const apiBase = getApiBase();
+            const listDiv = document.getElementById("reviewsList");
+            listDiv.innerText = "Betöltés...";
+
+            try {
+                const resp = await fetch(`${apiBase}/api/pois/${poiId}/reviews`);
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    listDiv.innerText = "Hiba: " + (data.error || resp.status);
+                    return;
+                }
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    listDiv.innerText = "Még nincs értékelés. Légy te az első!";
+                    return;
+                }
+
+                listDiv.innerHTML = data.map(r => {
+                    const dateStr = new Date(r.createdUtc).toLocaleString("hu-HU");
+                    const stars = "⭐".repeat(r.rating);
+
+                    return `
+                        <div class="review-item">
+                            <div class="rating-stars">${stars}</div>
+                            <div>${r.comment ? r.comment : "<i>Nincs szöveges értékelés.</i>"}</div>
+                            <div class="review-meta">
+                                ${r.userId ? ("User #" + r.userId + " • ") : ""}
+                                ${dateStr}
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            } catch (err) {
+                console.error(err);
+                listDiv.innerText = "Nem sikerült betölteni az értékeléseket.";
+            }
+        }
+
+        // Új értékelés feladása
+        async function submitReview() {
+            const apiBase = getApiBase();
+            const rating = parseInt(document.getElementById("rating").value, 10);
+            const comment = document.getElementById("comment").value.trim();
+            const status = document.getElementById("formStatus");
+
+            status.innerText = "Küldés...";
+
+            const body = {
+                rating: rating,
+                comment: comment || null,
+                userId: currentUserId || null
+            };
+
+            try {
+                const resp = await fetch(`${apiBase}/api/pois/${poiId}/reviews`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await resp.json().catch(() => ({}));
+
+                if (!resp.ok) {
+                    status.innerText = "Hiba: " + (data.error || resp.status);
+                    return;
+                }
+
+                status.innerText = "Értékelés elmentve. Köszönjük!";
+                document.getElementById("comment").value = "";
+
+                await loadSummary();
+                await loadReviews();
+            } catch (err) {
+                console.error(err);
+                status.innerText = "Nem sikerült elküldeni az értékelést.";
+            }
+        }
+
+        loadPoi();
+        loadSummary();
+        loadReviews();
+    </script>
+
+    <script src="navbar.js"></script>
+
+</body>
+</html>

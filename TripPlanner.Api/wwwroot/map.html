@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8" />
+    <title>TripPlanner – Térkép</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            font-family: Arial, sans-serif;
+        }
+
+        #navbar-root {
+            flex: 0 0 auto;
+        }
+
+        #map {
+            flex: 1 1 auto;
+            width: 100%;
+        }
+
+        .label {
+            background-color: white;
+            padding: 3px 6px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 13px;
+        }
+
+        /* NAVBAR */
+        .navbar {
+            background: #1976d2;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            color: white;
+        }
+
+        .nav-left {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+            .nav-link:hover {
+                background: rgba(255,255,255,0.15);
+            }
+
+            .nav-link.active {
+                background: white;
+                color: #1976d2;
+                font-weight: bold;
+            }
+
+        .nav-user {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .nav-user-guest {
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="navbar-root"></div>
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        /* 
+           ALAP KONFIG
+        */
+        const STORAGE_KEY_USER_ID = "tp_userId";
+        const STORAGE_KEY_USER_NAME = "tp_userName";
+
+        const API_BASE = "http://localhost:5130"; // backend port
+
+        // itinerary ID az URL-ből
+        const params = new URLSearchParams(window.location.search);
+        const itineraryId = params.get("id");
+
+        if (!itineraryId) {
+            alert("Hiányzik az itinerary id! Pl.: map.html?id=5");
+        }
+
+        /* 
+           TÉRKÉP LÉTREHOZÁSA
+         */
+        const map = L.map("map").setView([47.4979, 19.0402], 12);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: "© OpenStreetMap"
+        }).addTo(map);
+
+
+        /* 
+           ÚJ FUNKCIÓ:
+           popup POI értékeléssel + link az értékeléshez
+        */
+      function attachPoiPopup(marker, props) {
+    if (!props || !props.id) return;
+
+    const poiId = props.id;
+    const name = props.name || `POI #${poiId}`;
+
+    // Betöltés közbeni popup
+    marker.bindPopup(`
+        <div style="width:220px">
+            <b>${props.order ? (props.order + ". " + name) : name}</b><br>
+            Betöltés...
+        </div>
+    `);
+
+    // 1. POI adatok lekérése
+    fetch(`${API_BASE}/api/pois/${poiId}`)
+        .then(r => r.json())
+        .then(async poiData => {
+
+            // Leírás
+            let descriptionHtml = poiData.description
+                ? `<p style="margin:5px 0; font-size:13px; color:#555;">
+                        ${poiData.description}
+                   </p>`
+                : "";
+
+            // 2. Review-k külön API-ból
+            let reviewsHtml = "";
+
+            try {
+                const reviewResp = await fetch(`${API_BASE}/api/pois/${poiId}/reviews`);
+                const reviews = await reviewResp.json();
+
+                if (Array.isArray(reviews) && reviews.length > 0) {
+
+                    reviewsHtml = `
+                        <div style="
+                            max-height:120px;
+                            overflow-y:auto;
+                            border-top:1px solid #eee;
+                            margin-top:5px;
+                            padding-top:5px;
+                        ">
+                    `;
+
+                    reviews.forEach(rev => {
+
+                        const stars = "⭐".repeat(rev.rating);
+
+                        reviewsHtml += `
+                            <div style="
+                                font-size:12px;
+                                margin-bottom:8px;
+                                padding-bottom:6px;
+                                border-bottom:1px solid #f0f0f0;
+                            ">
+                                <div>${stars}</div>
+
+                                <div style="margin-top:2px;">
+                                    <i>
+                                        "${rev.comment || "Nincs szöveges értékelés."}"
+                                    </i>
+                                </div>
+
+                                <div style="
+                                    color:#777;
+                                    margin-top:2px;
+                                    font-size:11px;
+                                ">
+                                    ${rev.userId ? ("User #" + rev.userId + " • ") : ""}
+                                    ${new Date(rev.createdUtc).toLocaleDateString("hu-HU")}
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    reviewsHtml += "</div>";
+
+                } else {
+                    reviewsHtml = `
+                        <br>
+                        <small>Nincsenek még értékelések.</small>
+                    `;
+                }
+
+            } catch (err) {
+                console.error("Review betöltési hiba:", err);
+
+                reviewsHtml = `
+                    <br>
+                    <small>Nem sikerült betölteni az értékeléseket.</small>
+                `;
+            }
+
+            // Popup frissítése
+            marker.setPopupContent(`
+                <div style="width:240px">
+                    <b>
+                        ${props.order ? (props.order + ". " + name) : name}
+                    </b>
+
+                    ${descriptionHtml}
+
+                    ${reviewsHtml}
+
+                    <hr>
+
+                    <small>
+                        <a href="poi-reviews.html?poiId=${poiId}" target="_blank">
+                            Értékelés beküldése
+                        </a>
+                    </small>
+                </div>
+            `);
+        })
+        .catch(err => {
+            console.error("POI részletek hiba:", err);
+
+            marker.setPopupContent(`
+                <b>${name}</b><br>
+                Hiba az adatok betöltésekor.
+            `);
+        });
+}
+
+
+        /* 
+           GEOJSON + ÚTVONAL BETÖLTÉSE
+       */
+        if (itineraryId) {
+            fetch(`${API_BASE}/api/itineraries/${itineraryId}/geojson`)
+                .then(resp => resp.json())
+                .then(geo => {
+
+                    const layer = L.geoJSON(geo, {
+                        pointToLayer: (feature, latlng) => {
+
+                            // indulási pont
+                            if (feature.properties && feature.properties.kind === "start") {
+                                return L.marker(latlng).bindTooltip("Indulás", {
+                                    permanent: true,
+                                    direction: "top"
+                                });
+                            }
+
+                            // POI marker
+                            const marker = L.circleMarker(latlng, {
+                                radius: 7,
+                                weight: 2
+                            });
+
+                            // sorszámos címke a térképen
+                            if (feature.properties && feature.properties.order) {
+                                marker.bindTooltip(
+                                    `${feature.properties.order}. ${feature.properties.name}`,
+                                    {
+                                        permanent: true,
+                                        direction: "top",
+                                        offset: [0, -10],
+                                        className: "label"
+                                    }
+                                );
+
+                                //ÚJ: értékelés popup
+                                attachPoiPopup(marker, feature.properties);
+                            }
+
+                            return marker;
+                        },
+
+                        style: f =>
+                            f.geometry.type === "LineString"
+                                ? { color: "blue", weight: 4 }
+                                : {}
+                    }).addTo(map);
+
+                    // térkép középre igazítása
+                    try {
+                        map.fitBounds(layer.getBounds(), { padding: [30, 30] });
+                    } catch { }
+
+                    // útvonal összegzés betöltése
+                    return fetch(`${API_BASE}/api/itineraries/${itineraryId}/route-summary`);
+                })
+                .then(resp => resp.json())
+                .then(summary => {
+
+                    const steps = (summary.points || [])
+                        .map((p, i) => `${i + 1}. ${p.name}`)
+                        .join("<br>");
+
+                    // jobb felső infó panel
+                    const info = L.control({ position: "topright" });
+
+                    info.onAdd = function () {
+                        const div = L.DomUtil.create("div", "label");
+                        div.style.maxWidth = "260px";
+                        div.innerHTML = `
+                        <b>Itinerary #${summary.itineraryId}</b><br>
+                        Pontok: ${summary.count}<br>
+                        Össztáv: <b>${summary.totalKm} km</b>
+                        <hr style="margin:6px 0">
+                        ${steps}
+                    `;
+                        return div;
+                    };
+
+                    info.addTo(map);
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert("API hiba a térkép betöltésekor.");
+                });
+        }
+
+       
+    </script>
+    <script src="navbar.js"></script>
+</body>
+</html>

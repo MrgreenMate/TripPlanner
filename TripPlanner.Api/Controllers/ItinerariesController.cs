@@ -1,9 +1,11 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using TripPlanner.Api.Data;
-using TripPlanner.Api.Models;
 using TripPlanner.Api.DTOs;
-using Swashbuckle.AspNetCore.Filters;
+using TripPlanner.Api.Models;
+using TripPlanner.Api.Services;
+
 
 namespace TripPlanner.Api.Controllers
 {
@@ -12,96 +14,107 @@ namespace TripPlanner.Api.Controllers
     public class ItinerariesController : ControllerBase
     {
         private readonly AppDbContext _db;
-        public ItinerariesController(AppDbContext db) => _db = db;
+        private readonly PreferenceService _preferences;
+        private readonly AiScoringService _ai;
+        private readonly AiRouteService _aiRoute;
+        private readonly OpenRouteService _ors; 
 
-
-        // ============================================================
-        //   🍀 1) OPTIMALIZÁLÁS – EZ MENJEN LEGELŐL A FILE-BAN!
-        // ============================================================
-        [HttpPost("optimize")]
-        [SwaggerRequestExample(typeof(OptimizeRequest), typeof(OptimizeRequestExamples))]
-        public async Task<IActionResult> Optimize([FromBody] OptimizeRequest req)
+        public ItinerariesController(
+            AppDbContext db,
+            PreferenceService preferences,
+            AiScoringService ai,
+            AiRouteService aiRoute,
+            OpenRouteService ors) 
         {
-            if (req.PoiIds is null || req.PoiIds.Length == 0)
-                return BadRequest(new { error = "poiIds must contain at least one id." });
+            _db = db;
+            _preferences = preferences;
+            _ai = ai;
+            _aiRoute = aiRoute;
+            _ors = ors; 
+        }
 
-            var pois = await _db.Pois.Where(p => req.PoiIds.Contains(p.Id)).ToListAsync();
+
+
+        // 1) OPTIMALIZÁLÁS 
+
+        [HttpPost("optimize")]
+        public async Task<ActionResult<Itinerary>> Optimize([FromBody] OptimizeRequest req)
+        {
+            // POI lista betöltése
+            var pois = await _db.Pois
+                .Where(p => req.PoiIds.Contains(p.Id))
+                .ToListAsync();
+
             if (pois.Count == 0)
-                return BadRequest(new { error = "None of the provided poiIds exist." });
+                return BadRequest(new { error = "Nincs feldolgozható POI." });
 
+           
+            double startLat = req.StartLat;
+            double startLng = req.StartLng;
 
-            // ---- STARTPOINT feloldása ----
-            double startLat, startLng;
-            if (req.StartPoiId.HasValue)
+            if (req.StartPoiId != null)
             {
-                var sp = await _db.Pois.FindAsync(req.StartPoiId.Value);
-                if (sp is null)
-                    return BadRequest(new { error = $"startPoiId {req.StartPoiId} not found." });
+                var startPoi = await _db.Pois.FindAsync(req.StartPoiId);
+                if (startPoi == null)
+                    return BadRequest(new { error = "StartPoiId érvénytelen." });
 
-                startLat = sp.Latitude;
-                startLng = sp.Longitude;
-            }
-            else
-            {
-                startLat = req.StartLat;
-                startLng = req.StartLng;
+                startLat = startPoi.Latitude;
+                startLng = startPoi.Longitude;
             }
 
-
-            // ---- MÓD kiválasztása ----
+          
             string mode = req.Mode?.ToLowerInvariant() ?? "distance";
             List<int> route;
 
-            if (mode == "distance")
+          
+            if (mode == "genetic")//alapeset
+            {
+                route = GeneticAlgorithm(pois, startLat, startLng);
+            }
+            else if (mode == "ai") //régi megoldások 
+            {
+                route = await GreedyAiAsync(pois, startLat, startLng, req.UserId);
+            }
+            else if (mode == "distance")
+            {
                 route = GreedyByDistance(pois, startLat, startLng);
+            }
             else if (mode == "priority")
+            {
                 route = OrderByPriority(pois, startLat, startLng);
-            else // mixed
+            }
+            else //Ha egyik se fut le
+            {
                 route = GreedyMixed(
-                    pois, startLat, startLng,
+                    pois,
+                    startLat,
+                    startLng,
                     req.WeightDistance ?? 1.0,
                     req.WeightPriority ?? 1.0
                 );
+            }
 
-
-            // ---- SZAKASZOK + IDŐ ----
-            var distKm = TotalDistanceKmIncludingStart(route, pois, startLat, startLng);
-            var (segments, totalMin) = BuildSegmentsWithEta(route, pois, startLat, startLng, req.TravelMode);
-
-
-            // ---- MENTÉS DB-be ----
+            // POI-k sorrendjének elmentése JSON-ben
             var itinerary = new Itinerary
             {
                 UserId = req.UserId,
-                PoiListJson = System.Text.Json.JsonSerializer.Serialize(req.PoiIds),
-                OptimizedRouteJson = System.Text.Json.JsonSerializer.Serialize(route),
                 StartLat = startLat,
                 StartLng = startLng,
                 TravelMode = req.TravelMode,
-                CreatedUtc = DateTime.UtcNow
+                PoiListJson = JsonSerializer.Serialize(req.PoiIds),
+                OptimizedRouteJson = JsonSerializer.Serialize(route)
             };
 
             _db.Itineraries.Add(itinerary);
             await _db.SaveChangesAsync();
 
-
-            // ---- VÁLASZ ----
-            return Ok(new
-            {
-                itinerary.Id,
-                Mode = mode,
-                Route = route,
-                TotalKm = Math.Round(distKm, 2),
-                TotalMinutes = Math.Round(totalMin, 0),
-                TravelMode = req.TravelMode,
-                Segments = segments
-            });
+            return Ok(new { id = itinerary.Id });
         }
 
 
-        // ============================================================
-        //   🍀 2) ITINERARY LISTA (GET /api/itineraries)
-        // ============================================================
+
+        //   2) ITINERARY LISTA 
+
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
@@ -110,9 +123,7 @@ namespace TripPlanner.Api.Controllers
         }
 
 
-        // ============================================================
-        //   🍀 3) GET /api/itineraries/{id}
-        // ============================================================
+
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -121,9 +132,7 @@ namespace TripPlanner.Api.Controllers
         }
 
 
-        // ============================================================
-        //   🍀 4) GET /api/itineraries/{id}/route-points
-        // ============================================================
+
         [HttpGet("{id:int}/route-points")]
         public async Task<IActionResult> GetRoutePoints(int id)
         {
@@ -148,9 +157,7 @@ namespace TripPlanner.Api.Controllers
         }
 
 
-        // ============================================================
-        //   🍀 5) ÖSSZEFOGLALÓ (distance + sorrend)
-        // ============================================================
+
         [HttpGet("{id:int}/route-summary")]
         public async Task<IActionResult> GetRouteSummary(int id)
         {
@@ -177,9 +184,6 @@ namespace TripPlanner.Api.Controllers
         }
 
 
-        // ============================================================
-        //   🍀 6) GEOJSON – START + LINESTRING
-        // ============================================================
         [HttpGet("{id:int}/geojson")]
         public async Task<IActionResult> GetGeoJson(int id)
         {
@@ -192,13 +196,13 @@ namespace TripPlanner.Api.Controllers
 
             var features = new List<object>();
 
-            // start
+            // Start pont
             if (it.StartLat.HasValue && it.StartLng.HasValue)
             {
                 features.Add(new
                 {
                     type = "Feature",
-                    geometry = new { type = "Point", coordinates = new[] { it.StartLng, it.StartLat } },
+                    geometry = new { type = "Point", coordinates = new[] { it.StartLng.Value, it.StartLat.Value } },
                     properties = new { kind = "start", name = "Start" }
                 });
             }
@@ -216,26 +220,195 @@ namespace TripPlanner.Api.Controllers
                 });
             }
 
-            // vonal
-            var coords = new List<double[]>();
+            var routeCoords = new List<double[]>();
             if (it.StartLat.HasValue && it.StartLng.HasValue)
-                coords.Add(new[] { it.StartLng.Value, it.StartLat.Value });
-            coords.AddRange(ids.Select(pid => new[] { map[pid].Longitude, map[pid].Latitude }));
+                routeCoords.Add(new[] { it.StartLng.Value, it.StartLat.Value }); 
 
-            features.Add(new
+            routeCoords.AddRange(ids.Select(pid => new[] { map[pid].Longitude, map[pid].Latitude })); 
+
+            // Valós útvonal lekérése
+
+            var travelMode = string.IsNullOrEmpty(it.TravelMode) ? "walk" : it.TravelMode;
+            var realGeometry = await _ors.GetRealRouteGeometryAsync(routeCoords, travelMode);
+
+            if (realGeometry.HasValue)
             {
-                type = "Feature",
-                geometry = new { type = "LineString", coordinates = coords },
-                properties = new { kind = "route" }
-            });
+
+                features.Add(new
+                {
+                    type = "Feature",
+                    geometry = realGeometry.Value,
+                    properties = new { kind = "route", description = "Valós útvonal" }
+                });
+            }
+            else
+            {
+                // FALLBACK: Ha nincs API kulcs vagy hiba vanlégvonalbeli (Haversine) kirajzolás
+                features.Add(new
+                {
+                    type = "Feature",
+                    geometry = new { type = "LineString", coordinates = routeCoords },
+                    properties = new { kind = "route", description = "Légvonal" }
+                });
+            }
 
             return Ok(new { type = "FeatureCollection", features });
         }
+        [HttpPost("discover-optimize")]
+        public async Task<ActionResult<Itinerary>> DiscoverAndOptimize(DiscoverOptimizeRequest req)
+        {
+     
+            var all = await _db.Pois.ToListAsync();
+
+            var candidates = all
+                .Select(p => new
+                {
+                    Poi = p,
+                    Dist = HaversineKm(req.StartLat, req.StartLng, p.Latitude, p.Longitude)
+                })
+                .Where(x => x.Dist <= req.RadiusKm)
+                .ToList();
+
+            if (!candidates.Any())
+                return BadRequest(new { error = "Nincsenek POI-k a megadott sugárban." });
+
+          
+            var scored = new List<(Poi poi, double score)>();
+            var prefs = await _preferences.GetPreferencesAsync(req.UserId);
+
+            foreach (var c in candidates)
+            {
+                double aiScore = await _ai.ScoreCandidateAsync(c.Poi.Id, c.Dist, prefs);
+                scored.Add((c.Poi, aiScore));
+            }
+
+    
+            var selectedPois = scored
+                .OrderByDescending(s => s.score)
+                .Take(req.MaxPois)
+                .Select(s => s.poi)
+                .ToList();
+
+           
+            var optimizeReq = new OptimizeRequest
+            {
+                UserId = req.UserId,
+                StartLat = req.StartLat,
+                StartLng = req.StartLng,
+                PoiIds = selectedPois.Select(p => p.Id).ToArray(),
+                Mode = "genetic", 
+                TravelMode = req.TravelMode 
+            };
+
+            var itinerary = await OptimizeInternal(optimizeReq);
+
+            return Ok(itinerary);
+        }
+
+        //   SEGÉDFÜGGVÉNYEK
 
 
-        // ============================================================
-        //   🍀 7) SEGÉDFÜGGVÉNYEK
-        // ============================================================
+        // --- GENETIKUS ALGORITMUS ---
+        private List<int> GeneticAlgorithm(List<Poi> pois, double startLat, double startLng)
+        {
+            
+            int popSize = 50;       
+            int generations = 100;  
+            var random = new Random();
+            var population = new List<List<int>>();
+
+           
+            var baseRoute = pois.Select(p => p.Id).ToList();
+            for (int i = 0; i < popSize; i++)
+            {
+                var shuffled = baseRoute.OrderBy(x => random.Next()).ToList();
+                population.Add(shuffled);
+            }
+
+          
+            for (int g = 0; g < generations; g++)
+            {
+                
+                var fitnessList = population.Select(route => new
+                {
+                    Route = route,
+                    Fitness = 1.0 / CalculateRouteDistance(route, pois, startLat, startLng)
+                }).ToList();
+
+           
+                fitnessList = fitnessList.OrderByDescending(x => x.Fitness).ToList();
+                var newPopulation = fitnessList.Take(10).Select(x => x.Route).ToList();
+
+              
+                while (newPopulation.Count < popSize)
+                {
+                  
+                    var parent1 = fitnessList[random.Next(20)].Route;
+                    var parent2 = fitnessList[random.Next(20)].Route;
+
+             
+                    var child = OrderCrossover(parent1, parent2, random);
+
+                   
+                    if (random.NextDouble() < 0.05)
+                    {
+                        int idx1 = random.Next(child.Count);
+                        int idx2 = random.Next(child.Count);
+                        (child[idx1], child[idx2]) = (child[idx2], child[idx1]);
+                    }
+
+                    newPopulation.Add(child);
+                }
+                population = newPopulation;
+            }
+
+      
+            var bestOverall = population.OrderBy(route => CalculateRouteDistance(route, pois, startLat, startLng)).First();
+            return bestOverall;
+        }
+
+        // Fitnesz segédfüggvény: Kiszámolja a teljes útvonal hosszát (Start -> 1. POI -> 2. POI ...)
+        private double CalculateRouteDistance(List<int> route, List<Poi> pois, double startLat, double startLng)
+        {
+            double dist = 0;
+            double currentLat = startLat;
+            double currentLng = startLng;
+
+            foreach (var id in route)
+            {
+                var poi = pois.First(p => p.Id == id);
+                dist += HaversineKm(currentLat, currentLng, poi.Latitude, poi.Longitude);
+                currentLat = poi.Latitude;
+                currentLng = poi.Longitude;
+            }
+            return dist; 
+        }
+
+        private List<int> OrderCrossover(List<int> p1, List<int> p2, Random rand)
+        {
+            int size = p1.Count;
+            int start = rand.Next(size);
+            int end = rand.Next(start, size);
+            if (start > end) (start, end) = (end, start);
+
+            var child = new int[size];
+            for (int i = 0; i < size; i++) child[i] = -1;
+
+          
+            for (int i = start; i <= end; i++) child[i] = p1[i];
+
+           
+            int currentP2Index = 0;
+            for (int i = 0; i < size; i++)
+            {
+                if (child[i] == -1)
+                {
+                    while (child.Contains(p2[currentP2Index])) currentP2Index++;
+                    child[i] = p2[currentP2Index];
+                }
+            }
+            return child.ToList();
+        }
 
         private List<int> GreedyByDistance(List<Poi> pois, double lat, double lng)
         {
@@ -305,78 +478,97 @@ namespace TripPlanner.Api.Controllers
             return R * 2 * Math.Atan2(Math.Sqrt(h), Math.Sqrt(1 - h));
         }
 
-        private double TotalDistanceKmIncludingStart(List<int> route, List<Poi> pois, double sLat, double sLng)
+        
+        private async Task<List<int>> GreedyAiAsync(
+            List<Poi> pois,
+            double startLat,
+            double startLng,
+            int userId)
         {
-            if (route.Count == 0) return 0;
+            var prefs = await _preferences.GetPreferencesAsync(userId);
 
-            var map = pois.ToDictionary(p => p.Id);
-            double total = 0;
+            var remaining = new List<Poi>(pois);
+            var route = new List<int>();
 
-            // start -> első
-            var first = map[route[0]];
-            total += HaversineKm(sLat, sLng, first.Latitude, first.Longitude);
+            double clat = startLat;
+            double clng = startLng;
 
-            // poi -> poi
-            for (int i = 1; i < route.Count; i++)
+            while (remaining.Count > 0)
             {
-                var a = map[route[i - 1]];
-                var b = map[route[i]];
-                total += HaversineKm(a.Latitude, a.Longitude, b.Latitude, b.Longitude);
+                double bestScore = double.NegativeInfinity;
+                Poi? bestPoi = null;
+
+                foreach (var candidate in remaining)
+                {
+                    double d = HaversineKm(clat, clng, candidate.Latitude, candidate.Longitude);
+                    double score = await _ai.ScoreCandidateAsync(candidate.Id, d, prefs);
+
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestPoi = candidate;
+                    }
+                }
+
+                if (bestPoi == null) break;
+
+                route.Add(bestPoi.Id);
+                clat = bestPoi.Latitude;
+                clng = bestPoi.Longitude;
+                remaining.Remove(bestPoi);
             }
 
-            return total;
+            return route;
         }
-
-        private (List<object>, double) BuildSegmentsWithEta(List<int> route, List<Poi> pois,
-            double sLat, double sLng, string? mode)
+        private async Task<Itinerary> OptimizeInternal(OptimizeRequest req)
         {
-            var map = pois.ToDictionary(p => p.Id);
-            double speed = mode?.ToLower() switch
+          
+            var pois = await _db.Pois
+                .Where(p => req.PoiIds.Contains(p.Id))
+                .ToListAsync();
+
+            if (!pois.Any()) throw new Exception("Nincsenek érvényes POI-k a tervezéshez.");
+
+          
+            double startLat = req.StartLat;
+            double startLng = req.StartLng;
+
+            if (req.StartPoiId.HasValue)
             {
-                "drive" => 28.0,
-                "walk" => 4.8,
-                _ => 4.8
+                var startPoi = await _db.Pois.FindAsync(req.StartPoiId.Value);
+                if (startPoi != null)
+                {
+                    startLat = startPoi.Latitude;
+                    startLng = startPoi.Longitude;
+                }
+            }
+
+            
+            string mode = req.Mode?.ToLowerInvariant() ?? "genetic";
+            List<int> route = mode switch
+            {
+                "genetic" => GeneticAlgorithm(pois, startLat, startLng),
+                "ai" => await GreedyAiAsync(pois, startLat, startLng, req.UserId),
+                "priority" => OrderByPriority(pois, startLat, startLng),
+                "distance" => GreedyByDistance(pois, startLat, startLng),
+                _ => GreedyMixed(pois, startLat, startLng, req.WeightDistance ?? 1.0, req.WeightPriority ?? 1.0)
             };
 
-            var segs = new List<object>();
-            double totalMins = 0;
-
-            // start -> first
-            if (route.Count > 0)
+           
+            var itinerary = new Itinerary
             {
-                var first = map[route[0]];
-                double d = HaversineKm(sLat, sLng, first.Latitude, first.Longitude);
-                double m = d / speed * 60;
-                segs.Add(new
-                {
-                    from = "START",
-                    to = new { first.Id, first.Name },
-                    distanceKm = Math.Round(d, 2),
-                    minutes = Math.Round(m, 0)
-                });
-                totalMins += m;
-            }
+                UserId = req.UserId,
+                StartLat = startLat,
+                StartLng = startLng,
+                TravelMode = req.TravelMode ?? "walk",
+                PoiListJson = JsonSerializer.Serialize(req.PoiIds),
+                OptimizedRouteJson = JsonSerializer.Serialize(route)
+            };
 
-            // poi -> poi
-            for (int i = 1; i < route.Count; i++)
-            {
-                var a = map[route[i - 1]];
-                var b = map[route[i]];
-                double d = HaversineKm(a.Latitude, a.Longitude, b.Latitude, b.Longitude);
-                double m = d / speed * 60;
+            _db.Itineraries.Add(itinerary);
+            await _db.SaveChangesAsync();
 
-                segs.Add(new
-                {
-                    from = new { a.Id, a.Name },
-                    to = new { b.Id, b.Name },
-                    distanceKm = Math.Round(d, 2),
-                    minutes = Math.Round(m, 0)
-                });
-
-                totalMins += m;
-            }
-
-            return (segs, totalMins);
+            return itinerary;
         }
     }
 }

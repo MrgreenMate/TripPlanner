@@ -2,7 +2,7 @@
 {
     public class Poi
     {
-        public int Id { get; set; }            // POI_ID
+        public int Id { get; set; }       
         public string Name { get; set; } = null!;
         public double Latitude { get; set; }
         public double Longitude { get; set; }
